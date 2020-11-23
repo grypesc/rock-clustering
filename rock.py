@@ -2,6 +2,7 @@ import heapq
 import numpy as np
 
 from scipy.sparse import lil_matrix
+from sklearn.preprocessing import OneHotEncoder
 
 
 def overlapping_coefficient(feature_similarities_and) -> float:
@@ -14,13 +15,33 @@ def jaccard_coefficient(feature_similarities_and, feature_similarities_or) -> fl
     return numerator / denominator
 
 
-def transactions_to_categorical(data) -> np.array:
+def transactions_to_binary(data) -> np.array:
     """ For total number of products k, products must be chars or ints from 1 to k. """
-    cat_columns = np.unique(data).shape[0]
-    cat_data = np.zeros((data.shape[0], cat_columns), dtype=int)
+    bin_columns = np.unique(data).shape[0]
+    bin_data = np.zeros((data.shape[0], bin_columns), dtype=int)
     for i in range(0, data.shape[0]):
-        cat_data[i, np.asarray(data[i, :], dtype=int) - 1] = 1
-    return cat_data
+        bin_data[i, np.asarray(data[i, :], dtype=int) - 1] = 1
+    return bin_data
+
+
+def binary_search(elements, value):
+    left, right = 0, len(elements) - 1
+
+    while left <= right:
+        middle = (left + right) // 2
+
+        if elements[middle] == value:
+            return middle
+
+        if elements[middle] < value:
+            left = middle + 1
+        elif elements[middle] > value:
+            right = middle - 1
+
+
+def categorical_to_binary(data) -> np.array:
+    enc = OneHotEncoder(handle_unknown='ignore', sparse=False)
+    return enc.fit_transform(data)
 
 
 class Cluster:
@@ -31,7 +52,13 @@ class Cluster:
             self.heap = heap
 
     def __lt__(self, other):
-        return self.heap[0][0] <= other.heap[0][0]
+        """Comparing clusters according to goodness measure of their heap roots.
+        If cluster is outlying and heap is empty than we want it to go down in the global heap Q"""
+        if self.heap and other.heap:
+            return self.heap[0][0] <= other.heap[0][0]
+        elif other.heap:
+            return 0
+        return 1
 
 
 class RockClustering:
@@ -63,46 +90,52 @@ class RockClustering:
 
         for cluster in self.q:
             heapq.heappush(self.global_heap,
-                           cluster)  # FIXME heap can be empty @_@ use heapify for sum fastur pythonz boiiii
+                           cluster)  # FIXME  heapify for sum fastur pythonz boiiii
 
         while len(self.global_heap) > self.k:
+            if not self.global_heap[0].heap:
+                print("Could not find more clusters to merge. Stopped at {} clusters".format(len(self.global_heap)))
+                break
             u = heapq.heappop(self.global_heap)
-            v = self.q[u.heap[0][1]]
+            v = u.heap[0][1]
             self.global_heap.remove(v)
             heapq.heapify(self.global_heap)
             w = Cluster(sorted([*u.points, *v.points]))
-            print(u.heap)
-            print(v.heap)
-            nbr_points = set([*[j for i, j in u.heap], *[j for i, j in v.heap]])
-            nbr_points.remove(u.points[0])
-            nbr_points.remove(v.points[0])
-            for x in nbr_points:
-                self.links[x, w.points[0]] = self.links[x, u.points[0]] + self.links[x, v.points[0]]
+            to_remove_from_q = max(u.points[0], v.points[0])
+            nbr_clusters = set([*[j for i, j in u.heap], *[j for i, j in v.heap]])
+            nbr_clusters.remove(u)
+            nbr_clusters.remove(v)
+            for x in nbr_clusters:
+                self.links[x.points[0], w.points[0]] = self.links[x.points[0], u.points[0]] + self.links[
+                    x.points[0], v.points[0]]
 
-                self.q[x].heap = list(filter(lambda x: x[1] != u.points, self.q[x].heap))
-                try:
-                    self.q[x].points.remove(u.points[0])
-                except ValueError:
-                    pass
-                heapq.heapify(self.q[x].heap)
+                x.heap = list(filter(lambda z: z[1] != u, x.heap))
+                index = binary_search(x.points, u.points[0])
+                if index is not None:
+                    del x.heap[index]
 
-                self.q[x].heap = list(filter(lambda x: x[1] != v.points, self.q[x].heap))
-                try:
-                    self.q[x].points.remove(v.points[0])
-                except ValueError:
-                    pass
-                heapq.heapify(self.q[x].heap)
+                x.heap = list(filter(lambda z: z[1] != v, x.heap))
 
-                g_measure = self.goodness_measure(w, self.q[x])
-                heapq.heappush(self.q[x].heap, (g_measure, w.points))
-                heapq.heappush(w.heap, (g_measure, self.q[x].points))
+                index = binary_search(x.points, v.points[0])
+                if index is not None:
+                    del x.heap[index]
 
+                heapq.heapify(x.heap)
+
+                g_measure = self.goodness_measure(w, x)
+                heapq.heappush(x.heap, (g_measure, w))
+                heapq.heappush(w.heap, (g_measure, x))
+
+            self.q[to_remove_from_q] = None
+            self.q[w.points[0]] = w
             heapq.heapify(self.global_heap)
             heapq.heappush(self.global_heap, w)
-
-        print(self.global_heap)
+            print(len(self.global_heap))
 
     def compute_links(self, nbr_threshold) -> lil_matrix:
+        """Returns a sparse matrix of links, O(n*m_a^2) complexity
+        where m_a is an average number of neighbors for each cluster-point"""
+
         neighbors_list = self.find_neighbors(nbr_threshold)
         links = lil_matrix((self.S.shape[0], self.S.shape[0]), dtype=int)
         n_rows, n_col = self.S.shape
@@ -112,6 +145,7 @@ class RockClustering:
                 for l in range(j + 1, i_neighbors.shape[0]):
                     links[i_neighbors[j], i_neighbors[l]] = links[i_neighbors[j], i_neighbors[l]] + 1
                     links[i_neighbors[l], i_neighbors[j]] = links[i_neighbors[l], i_neighbors[j]] + 1
+            print("Links calcuated for {} points".format(i))
         return links
 
     def find_neighbors(self, threshold) -> list:
@@ -123,6 +157,7 @@ class RockClustering:
             feature_similarities_or = np.logical_or(self.S, self.S[i, :])
             similarity = jaccard_coefficient(feature_similarities_and, feature_similarities_or)
             neighbors_list[i] = np.where(similarity >= threshold)
+            print(i)
         return neighbors_list
 
     def goodness_measure(self, c1: Cluster, c2: Cluster) -> float:
@@ -138,5 +173,12 @@ class RockClustering:
 
 
 if __name__ == '__main__':
-    data = np.loadtxt("data/test2.csv", dtype=str, delimiter=",", skiprows=0)
-    clustering = RockClustering(transactions_to_categorical(data), 2, nbr_threshold=0.50)
+    data = np.loadtxt("data/sampled_no_names.csv", dtype=str, delimiter=",", skiprows=0)
+    labels = np.asarray(data[:, -1], dtype=int)
+    data = data[:, :-1]
+
+    clustering = RockClustering(categorical_to_binary(data[:1000, :]), 20, nbr_threshold=0.80)
+    final_clusters = [x for x in clustering.q if x is not None]
+    for cluster in final_clusters:
+        print(labels[cluster.points])
+        print(np.sum(labels[cluster.points]))
