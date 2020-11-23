@@ -24,15 +24,14 @@ def transactions_to_categorical(data) -> np.array:
 
 
 class Cluster:
-    def __init__(self, point):
-        self.points = [point]
+    def __init__(self, points, heap=None):
+        self.points = points
         self.heap = []
-
-    def add_to_heap(self, point_index):
-        heapq.heappush(self.heap, (0, point_index))
+        if heap is not None:
+            self.heap = heap
 
     def __lt__(self, other):
-        return self.heap[0][0] >= other.heap[0][0]
+        return self.heap[0][0] <= other.heap[0][0]
 
 
 class RockClustering:
@@ -50,7 +49,7 @@ class RockClustering:
         self.k = k
         self.nbr_threshold = nbr_threshold
         self.links = self.compute_links(nbr_threshold)
-        self.q = [Cluster(i) for i in range(0, S.shape[0])]
+        self.q = [Cluster([i]) for i in range(0, S.shape[0])]
         self.global_heap = []  # In the paper it is Q
         self.clustering()
 
@@ -59,7 +58,7 @@ class RockClustering:
             points_linked = self.links.getrow(index).todok().items()
             for point, _ in points_linked:
                 point = point[1] if point[1] != index else point[0]
-                heap_tuple = (self.goodness_measure(self.q[index], self.q[point]), point)
+                heap_tuple = (self.goodness_measure(self.q[index], self.q[point]), self.q[point])
                 heapq.heappush(self.q[index].heap, heap_tuple)
 
         for cluster in self.q:
@@ -67,7 +66,41 @@ class RockClustering:
                            cluster)  # FIXME heap can be empty @_@ use heapify for sum fastur pythonz boiiii
 
         while len(self.global_heap) > self.k:
-            pass
+            u = heapq.heappop(self.global_heap)
+            v = self.q[u.heap[0][1]]
+            self.global_heap.remove(v)
+            heapq.heapify(self.global_heap)
+            w = Cluster(sorted([*u.points, *v.points]))
+            print(u.heap)
+            print(v.heap)
+            nbr_points = set([*[j for i, j in u.heap], *[j for i, j in v.heap]])
+            nbr_points.remove(u.points[0])
+            nbr_points.remove(v.points[0])
+            for x in nbr_points:
+                self.links[x, w.points[0]] = self.links[x, u.points[0]] + self.links[x, v.points[0]]
+
+                self.q[x].heap = list(filter(lambda x: x[1] != u.points, self.q[x].heap))
+                try:
+                    self.q[x].points.remove(u.points[0])
+                except ValueError:
+                    pass
+                heapq.heapify(self.q[x].heap)
+
+                self.q[x].heap = list(filter(lambda x: x[1] != v.points, self.q[x].heap))
+                try:
+                    self.q[x].points.remove(v.points[0])
+                except ValueError:
+                    pass
+                heapq.heapify(self.q[x].heap)
+
+                g_measure = self.goodness_measure(w, self.q[x])
+                heapq.heappush(self.q[x].heap, (g_measure, w.points))
+                heapq.heappush(w.heap, (g_measure, self.q[x].points))
+
+            heapq.heapify(self.global_heap)
+            heapq.heappush(self.global_heap, w)
+
+        print(self.global_heap)
 
     def compute_links(self, nbr_threshold) -> lil_matrix:
         neighbors_list = self.find_neighbors(nbr_threshold)
@@ -105,5 +138,5 @@ class RockClustering:
 
 
 if __name__ == '__main__':
-    data = np.loadtxt("data/test.csv", dtype=str, delimiter=",", skiprows=0)
+    data = np.loadtxt("data/test2.csv", dtype=str, delimiter=",", skiprows=0)
     clustering = RockClustering(transactions_to_categorical(data), 2, nbr_threshold=0.50)
