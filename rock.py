@@ -16,12 +16,17 @@ def jaccard_coefficient(feature_similarities_and, feature_similarities_or) -> fl
 
 
 def transactions_to_binary(data) -> np.array:
-    """ For total number of products k, products must be chars or ints from 1 to k. """
+    """ For the total number of products k, products must be chars or ints from 1 to k. """
     bin_columns = np.unique(data).shape[0]
     bin_data = np.zeros((data.shape[0], bin_columns), dtype=int)
     for i in range(0, data.shape[0]):
         bin_data[i, np.asarray(data[i, :], dtype=int) - 1] = 1
     return bin_data
+
+
+def categorical_to_binary(data) -> np.array:
+    enc = OneHotEncoder(handle_unknown='ignore', sparse=False)
+    return enc.fit_transform(data)
 
 
 def binary_search(elements, value):
@@ -37,11 +42,6 @@ def binary_search(elements, value):
             left = middle + 1
         elif elements[middle] > value:
             right = middle - 1
-
-
-def categorical_to_binary(data) -> np.array:
-    enc = OneHotEncoder(handle_unknown='ignore', sparse=False)
-    return enc.fit_transform(data)
 
 
 class Cluster:
@@ -128,7 +128,7 @@ class RockClustering:
 
             self.q[to_remove_from_q] = None
             self.q[w.points[0]] = w
-            heapq.heapify(self.global_heap)
+
             heapq.heappush(self.global_heap, w)
             print(len(self.global_heap))
 
@@ -157,7 +157,6 @@ class RockClustering:
             feature_similarities_or = np.logical_or(self.S, self.S[i, :])
             similarity = jaccard_coefficient(feature_similarities_and, feature_similarities_or)
             neighbors_list[i] = np.where(similarity >= threshold)
-            print(i)
         return neighbors_list
 
     def goodness_measure(self, c1: Cluster, c2: Cluster) -> float:
@@ -177,7 +176,7 @@ if __name__ == '__main__':
     labels = np.asarray(data[:, -1], dtype=int)
     data = data[:, :-1]
 
-    clustering = RockClustering(categorical_to_binary(data[:1000, :]), 20, nbr_threshold=0.80)
+    clustering = RockClustering(categorical_to_binary(data[:, :]), 20, nbr_threshold=0.80)
     final_clusters = [x for x in clustering.q if x is not None]
     for cluster in final_clusters:
         print(labels[cluster.points])
