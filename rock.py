@@ -1,3 +1,4 @@
+import copy
 import heapq
 import numpy as np
 
@@ -5,7 +6,16 @@ from scipy.sparse import lil_matrix
 from sklearn.preprocessing import OneHotEncoder
 
 
-def overlapping_coefficient(feature_similarities_and) -> float:
+def purity(clusters, labels):
+    pure_points = 0
+    for i, cluster in enumerate(clusters, 1):
+        counts = np.bincount(labels[cluster.points])
+        dominant = np.argmax(counts)
+        pure_points += np.sum(labels[cluster.points] == dominant)
+    return pure_points / labels.shape[0]
+
+
+def overlap_coefficient(feature_similarities_and) -> float:
     return np.sum(feature_similarities_and) / feature_similarities_and.shape[1]
 
 
@@ -82,15 +92,18 @@ class RockClustering:
 
     def clustering(self):
         for index in range(0, self.S.shape[0]):
+            # Build local heaps
             points_linked = self.links.getrow(index).todok().items()
             for point, _ in points_linked:
                 point = point[1] if point[1] != index else point[0]
                 heap_tuple = (self.goodness_measure(self.q[index], self.q[point]), self.q[point])
                 heapq.heappush(self.q[index].heap, heap_tuple)
 
+        # self.global_heap = copy.copy(self.q)
+        # heapq.heapify(self.global_heap)
         for cluster in self.q:
-            heapq.heappush(self.global_heap,
-                           cluster)  # FIXME  heapify for sum fastur pythonz boiiii
+            # Build global heap
+            heapq.heappush(self.global_heap, cluster)
 
         while len(self.global_heap) > self.k:
             if not self.global_heap[0].heap:
@@ -170,9 +183,12 @@ class RockClustering:
             c2.points) ** exponent
         return (-1) * numerator / denominator
 
+    def clusters(self):
+        return [x for x in self.q if x is not None]
+
 
 if __name__ == '__main__':
-    data = np.loadtxt("data/sampled_no_names.csv", dtype=str, delimiter=",", skiprows=0)
+    data = np.loadtxt("data/mushrooms.csv", dtype=str, delimiter=",", skiprows=0)
     labels = np.asarray(data[:, -1], dtype=int)
     data = data[:, :-1]
 
