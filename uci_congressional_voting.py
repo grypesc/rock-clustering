@@ -1,14 +1,18 @@
-from rock import RockClustering, categorical_to_binary, transactions_to_binary, purity
 import numpy as np
+
+from rock import RockClustering
+from utils import categorical_to_binary, purity
 
 if __name__ == '__main__':
     data = np.loadtxt("data/house-votes-84.csv", dtype=str, delimiter=",", skiprows=0)
+    # data = data[[~np.isin('?', row).all() for row in data]]
     labels = np.asarray(data[:, 0], dtype=str)
     integer_labels = np.zeros(labels.shape[0], dtype=int)
-    for i, label  in enumerate(np.unique(labels), 0):
+    for i, label in enumerate(np.unique(labels), 0):
         integer_labels[labels == label] = i
 
     data = data[:, 1:]
+    print(data.shape)
 
     clustering = RockClustering(categorical_to_binary(data), 2, nbr_threshold=0.73)
     final_clusters = clustering.clusters()

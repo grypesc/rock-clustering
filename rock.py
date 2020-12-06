@@ -1,57 +1,10 @@
 import copy
 import heapq
 import numpy as np
+import cProfile
 
 from scipy.sparse import lil_matrix
-from sklearn.preprocessing import OneHotEncoder
-
-
-def purity(clusters, labels):
-    pure_points = 0
-    for i, cluster in enumerate(clusters, 1):
-        counts = np.bincount(labels[cluster.points])
-        dominant = np.argmax(counts)
-        pure_points += np.sum(labels[cluster.points] == dominant)
-    return pure_points / labels.shape[0]
-
-
-def overlap_coefficient(feature_similarities_and) -> float:
-    return np.sum(feature_similarities_and) / feature_similarities_and.shape[1]
-
-
-def jaccard_coefficient(feature_similarities_and, feature_similarities_or) -> float:
-    numerator = np.sum(feature_similarities_and, axis=1)
-    denominator = np.sum(feature_similarities_or, axis=1)
-    return numerator / denominator
-
-
-def transactions_to_binary(data) -> np.array:
-    """ For the total number of products k, products must be chars or ints from 1 to k. """
-    bin_columns = np.unique(data).shape[0]
-    bin_data = np.zeros((data.shape[0], bin_columns), dtype=int)
-    for i in range(0, data.shape[0]):
-        bin_data[i, np.asarray(data[i, :], dtype=int) - 1] = 1
-    return bin_data
-
-
-def categorical_to_binary(data) -> np.array:
-    enc = OneHotEncoder(handle_unknown='ignore', sparse=False)
-    return enc.fit_transform(data)
-
-
-def binary_search(elements, value):
-    left, right = 0, len(elements) - 1
-
-    while left <= right:
-        middle = (left + right) // 2
-
-        if elements[middle] == value:
-            return middle
-
-        if elements[middle] < value:
-            left = middle + 1
-        elif elements[middle] > value:
-            right = middle - 1
+from utils import jaccard_coefficient, categorical_to_binary, binary_search
 
 
 class Cluster:
@@ -85,7 +38,9 @@ class RockClustering:
         self.S = S
         self.k = k
         self.nbr_threshold = nbr_threshold
-        self.links = self.compute_links(nbr_threshold)
+        f_of_theta = (1.0 - self.nbr_threshold) / (1.0 + self.nbr_threshold) # Used for goodness of measure calculation
+        self.goodness_exponent = 1 + 2 * f_of_theta  # Used for goodness of measure calculation
+        self.links = self.compute_links()
         self.q = [Cluster([i]) for i in range(0, S.shape[0])]
         self.global_heap = []  # In the paper it is Q
         self.clustering()
@@ -99,11 +54,11 @@ class RockClustering:
                 heap_tuple = (self.goodness_measure(self.q[index], self.q[point]), self.q[point])
                 heapq.heappush(self.q[index].heap, heap_tuple)
 
-        # self.global_heap = copy.copy(self.q)
-        # heapq.heapify(self.global_heap)
-        for cluster in self.q:
-            # Build global heap
-            heapq.heappush(self.global_heap, cluster)
+        self.global_heap = copy.copy(self.q)
+        heapq.heapify(self.global_heap)
+
+        profile = cProfile.Profile()
+        profile.enable()
 
         while len(self.global_heap) > self.k:
             if not self.global_heap[0].heap:
@@ -144,12 +99,14 @@ class RockClustering:
 
             heapq.heappush(self.global_heap, w)
             print(len(self.global_heap))
+        profile.disable()
+        profile.print_stats(sort='time')
 
-    def compute_links(self, nbr_threshold) -> lil_matrix:
+    def compute_links(self) -> lil_matrix:
         """Returns a sparse matrix of links, O(n*m_a^2) complexity
         where m_a is an average number of neighbors for each cluster-point"""
 
-        neighbors_list = self.find_neighbors(nbr_threshold)
+        neighbors_list = self.find_neighbors()
         links = lil_matrix((self.S.shape[0], self.S.shape[0]), dtype=int)
         n_rows, n_col = self.S.shape
         for i in range(0, n_rows):
@@ -161,7 +118,7 @@ class RockClustering:
             print("Links calcuated for {} points".format(i))
         return links
 
-    def find_neighbors(self, threshold) -> list:
+    def find_neighbors(self) -> list:
         n_rows, n_col = self.S.shape
         neighbors_list = [None for i in range(0, n_rows)]
         for i in range(0, n_rows):
@@ -169,31 +126,18 @@ class RockClustering:
             feature_similarities_and[i, :] = False
             feature_similarities_or = np.logical_or(self.S, self.S[i, :])
             similarity = jaccard_coefficient(feature_similarities_and, feature_similarities_or)
-            neighbors_list[i] = np.where(similarity >= threshold)
+            neighbors_list[i] = np.where(similarity >= self.nbr_threshold)
         return neighbors_list
 
     def goodness_measure(self, c1: Cluster, c2: Cluster) -> float:
-        f_of_theta = (1.0 - self.nbr_threshold) / (1.0 + self.nbr_threshold)
-        exponent = 1 + 2 * f_of_theta
         numerator = 0
         for i in c1.points:
             for j in c2.points:
                 numerator += self.links[i, j]
-        denominator = (len(c1.points) + len(c1.points)) ** exponent - len(c1.points) ** exponent - len(
-            c2.points) ** exponent
+        denominator = (len(c1.points) + len(c1.points)) ** self.goodness_exponent - len(c1.points) ** self.goodness_exponent - len(
+            c2.points) ** self.goodness_exponent
         return (-1) * numerator / denominator
 
     def clusters(self):
         return [x for x in self.q if x is not None]
 
-
-if __name__ == '__main__':
-    data = np.loadtxt("data/mushrooms.csv", dtype=str, delimiter=",", skiprows=0)
-    labels = np.asarray(data[:, -1], dtype=int)
-    data = data[:, :-1]
-
-    clustering = RockClustering(categorical_to_binary(data[:, :]), 20, nbr_threshold=0.80)
-    final_clusters = [x for x in clustering.q if x is not None]
-    for cluster in final_clusters:
-        print(labels[cluster.points])
-        print(np.sum(labels[cluster.points]))
