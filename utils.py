@@ -15,7 +15,7 @@ def overlap_coefficient(feature_similarities_and) -> float:
     return np.sum(feature_similarities_and) / feature_similarities_and.shape[1]
 
 
-def jaccard_coefficient(feature_similarities_and, feature_similarities_or) -> float:
+def tanimoto_coefficient(feature_similarities_and, feature_similarities_or) -> float:
     numerator = np.sum(feature_similarities_and, axis=1)
     denominator = np.sum(feature_similarities_or, axis=1)
     return numerator / denominator
@@ -50,8 +50,8 @@ def binary_search(elements, value):
             right = middle - 1
 
 
-def geo_distance(lat, lon, lat_vector, lon_vector):
-    R = 6373.0
+def spherical_distance(lat, lon, lat_vector, lon_vector):
+    R = 6371.0
     dlon = lon_vector - lon
     dlat = lat_vector - lat
     a = np.sin(dlat / 2) ** 2 + np.cos(lat) * np.cos(lat) * np.sin(dlon / 2) ** 2

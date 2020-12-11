@@ -4,7 +4,7 @@ import numpy as np
 import cProfile
 
 from scipy.sparse import lil_matrix
-from utils import jaccard_coefficient, categorical_to_binary, binary_search
+from utils import tanimoto_coefficient, binary_search
 
 
 class Cluster:
@@ -125,7 +125,7 @@ class RockClustering:
             feature_similarities_and = np.logical_and(self.S, self.S[i, :])
             feature_similarities_and[i, :] = False
             feature_similarities_or = np.logical_or(self.S, self.S[i, :])
-            similarity = jaccard_coefficient(feature_similarities_and, feature_similarities_or)
+            similarity = tanimoto_coefficient(feature_similarities_and, feature_similarities_or)
             neighbors_list[i] = np.where(similarity >= self.nbr_threshold)
         return neighbors_list
 
