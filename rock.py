@@ -1,14 +1,16 @@
 import copy
-import cProfile
 import heapq
 import numpy as np
 
-from scipy.sparse import lil_matrix
-from utils import tanimoto_coefficient, binary_search
+from utils import tanimoto_coefficient
 
 
 class Cluster:
     def __init__(self, points, heap=None):
+        """
+        :param points: Points belonging to this cluster
+        :param heap: Local heap
+        """
         self.points = points
         self.heap = []
         if heap is not None:
@@ -32,7 +34,7 @@ class RockClustering:
     def __init__(self, S: np.array, k: int, nbr_threshold=0.5):
         """
         :param S: Data set to cluster
-        :param k: Number of clusters
+        :param k: Number of clusters to find
         :param nbr_threshold: Theta parameter from the original paper, should be from 0 to 1
         """
         self.S = S
@@ -40,14 +42,10 @@ class RockClustering:
         self.nbr_threshold = nbr_threshold
         f_of_theta = (1.0 - self.nbr_threshold) / (1.0 + self.nbr_threshold)  # Used for goodness of measure calculation
         self.goodness_exponent = 1 + 2 * f_of_theta  # Used for goodness of measure calculation
-        profile = cProfile.Profile()  # Test purpose only
-        profile.enable()  # Test purpose only
         self.links = self.compute_links()
         self.q = [Cluster([i]) for i in range(0, S.shape[0])]
         self.global_heap = []  # In the paper it is Q
         self.clustering()
-        profile.disable()  # Test purpose only
-        profile.print_stats(sort='time')  # Test purpose only
 
     def clustering(self):
         for index in range(0, self.S.shape[0]):
@@ -68,7 +66,6 @@ class RockClustering:
             u = heapq.heappop(self.global_heap)
             v = u.heap[0][1]
             self.global_heap.remove(v)
-            heapq.heapify(self.global_heap)
             w = Cluster(sorted([*u.points, *v.points]))
             self.q[max(u.points[0], v.points[0])] = None
             self.q[w.points[0]] = w
@@ -78,7 +75,8 @@ class RockClustering:
 
             for x in nbr_clusters:
                 #  Update local heaps of neighbors of merged cluster u and v
-                self.links[x.points[0], w.points[0]] = self.links[x.points[0], u.points[0]] + self.links[x.points[0], v.points[0]]
+                self.links[x.points[0], w.points[0]] = self.links[x.points[0], u.points[0]] + self.links[
+                    x.points[0], v.points[0]]
                 x.heap = [tup for tup in x.heap if tup[1] is not u and tup[1] is not v]
                 g_measure = self.goodness_measure(w, x)
                 x.heap.append((g_measure, w))
@@ -86,11 +84,12 @@ class RockClustering:
                 w.heap.append((g_measure, x))
 
             heapq.heapify(w.heap)
-            heapq.heappush(self.global_heap, w)
+            self.global_heap.append(w)
+            heapq.heapify(self.global_heap)
             print("Clusters left: {}".format(len(self.global_heap)))
 
-    def compute_links(self) -> lil_matrix:
-        """Returns a sparse matrix of links, O(n*m_a^2) complexity
+    def compute_links(self) -> np.array:
+        """Returns a matrix of links, O(n*m_a^2) complexity
         where m_a is an average number of neighbors for each cluster-point"""
 
         neighbors_list = self.find_neighbors()

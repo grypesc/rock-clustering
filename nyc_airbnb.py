@@ -1,11 +1,12 @@
-from rock_geographical import RockGeoClustering
-from utils import purity
+import cProfile
 import folium
 import numpy as np
 import pandas as pd  # nyc_airbnb requires smarter loading then numpy loading
 
-if __name__ == '__main__':
+from rock_geographical import RockGeoClustering
+from utils import purity
 
+if __name__ == '__main__':
     data = pd.read_csv('data/AB_NYC_2019.csv', delimiter=',')
     data = data[["neighbourhood_group", "latitude", "longitude"]]
     data = data.to_numpy()
@@ -16,15 +17,20 @@ if __name__ == '__main__':
     labels = data[:, 0]
     data = data[:, 1:]
 
-    # Creating Basemap
+    # Visualizing data with Folium
     fig = folium.Figure(width=550, height=350)
     map = folium.Map(location=data[0, :], tiles='cartodbpositron', zoom_start=11)
     fig.add_child(map)
     colors = ['green', 'gray', 'orange', 'black', 'blue', 'lightblue', 'lightred', 'darkred', 'darkpurple', 'darkgreen', 'beige',
               'red', 'lightgreen', 'cadetblue', 'lightgray',  'darkblue', 'pink']
 
+    profile = cProfile.Profile()
+    profile.enable()
     clustering = RockGeoClustering(data, 5, theta=0.5, nbr_max_distance=50)
     final_clusters = clustering.clusters()
+    profile.disable()
+    profile.print_stats(sort='time')
+
     for i, cluster in enumerate(final_clusters, 1):
         print("Cluster no. {},\nlength = {}".format(i, len(cluster.points)))
         print(labels[cluster.points])
@@ -42,5 +48,4 @@ if __name__ == '__main__':
                               icon=folium.Icon(color="purple", icon='circle', prefix='fa-')).add_to(map)
 
     print("Purity = {}".format(purity(final_clusters, np.asarray(labels, dtype=int))))
-
     map.save('docs/nyc_clustering.html')
