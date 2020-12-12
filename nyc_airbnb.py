@@ -2,7 +2,7 @@ from rock_geographical import RockGeoClustering
 from utils import purity
 import folium
 import numpy as np
-import pandas as pd  # data processing, CSV file I/O (e.g. pd.read_csv)
+import pandas as pd  # nyc_airbnb requires smarter loading then numpy loading
 
 if __name__ == '__main__':
 

@@ -1,7 +1,7 @@
 import copy
+import cProfile
 import heapq
 import numpy as np
-import cProfile
 
 from scipy.sparse import lil_matrix
 from utils import tanimoto_coefficient, binary_search
@@ -18,7 +18,7 @@ class Cluster:
         """Comparing clusters according to goodness measure of their heap roots.
         If cluster is outlying and heap is empty than we want it to go down in the global heap Q"""
         if self.heap and other.heap:
-            return self.heap[0][0] <= other.heap[0][0]
+            return self.heap[0][0] < other.heap[0][0]
         elif other.heap:
             return 0
         return 1
@@ -38,29 +38,30 @@ class RockClustering:
         self.S = S
         self.k = k
         self.nbr_threshold = nbr_threshold
-        f_of_theta = (1.0 - self.nbr_threshold) / (1.0 + self.nbr_threshold) # Used for goodness of measure calculation
+        f_of_theta = (1.0 - self.nbr_threshold) / (1.0 + self.nbr_threshold)  # Used for goodness of measure calculation
         self.goodness_exponent = 1 + 2 * f_of_theta  # Used for goodness of measure calculation
+        profile = cProfile.Profile()  # Test purpose only
+        profile.enable()  # Test purpose only
         self.links = self.compute_links()
         self.q = [Cluster([i]) for i in range(0, S.shape[0])]
         self.global_heap = []  # In the paper it is Q
         self.clustering()
+        profile.disable()  # Test purpose only
+        profile.print_stats(sort='time')  # Test purpose only
 
     def clustering(self):
         for index in range(0, self.S.shape[0]):
             # Build local heaps
-            points_linked = self.links.getrow(index).todok().items()
-            for point, _ in points_linked:
-                point = point[1] if point[1] != index else point[0]
+            points_linked = np.nonzero(self.links[index, :])[0]
+            for point in points_linked:
                 heap_tuple = (self.goodness_measure(self.q[index], self.q[point]), self.q[point])
                 heapq.heappush(self.q[index].heap, heap_tuple)
 
         self.global_heap = copy.copy(self.q)
         heapq.heapify(self.global_heap)
 
-        profile = cProfile.Profile()
-        profile.enable()
-
         while len(self.global_heap) > self.k:
+            #  Merge clusters until you reach k clusters or local heaps are empty and ROCK can't continue
             if not self.global_heap[0].heap:
                 print("Could not find more clusters to merge. Stopped at {} clusters".format(len(self.global_heap)))
                 break
@@ -69,45 +70,31 @@ class RockClustering:
             self.global_heap.remove(v)
             heapq.heapify(self.global_heap)
             w = Cluster(sorted([*u.points, *v.points]))
-            to_remove_from_q = max(u.points[0], v.points[0])
+            self.q[max(u.points[0], v.points[0])] = None
+            self.q[w.points[0]] = w
             nbr_clusters = set([*[j for i, j in u.heap], *[j for i, j in v.heap]])
             nbr_clusters.remove(u)
             nbr_clusters.remove(v)
+
             for x in nbr_clusters:
-                self.links[x.points[0], w.points[0]] = self.links[x.points[0], u.points[0]] + self.links[
-                    x.points[0], v.points[0]]
-
-                x.heap = list(filter(lambda z: z[1] != u, x.heap))
-                index = binary_search(x.points, u.points[0])
-                if index is not None:
-                    del x.heap[index]
-
-                x.heap = list(filter(lambda z: z[1] != v, x.heap))
-
-                index = binary_search(x.points, v.points[0])
-                if index is not None:
-                    del x.heap[index]
-
-                heapq.heapify(x.heap)
-
+                #  Update local heaps of neighbors of merged cluster u and v
+                self.links[x.points[0], w.points[0]] = self.links[x.points[0], u.points[0]] + self.links[x.points[0], v.points[0]]
+                x.heap = [tup for tup in x.heap if tup[1] is not u and tup[1] is not v]
                 g_measure = self.goodness_measure(w, x)
-                heapq.heappush(x.heap, (g_measure, w))
-                heapq.heappush(w.heap, (g_measure, x))
+                x.heap.append((g_measure, w))
+                heapq.heapify(x.heap)
+                w.heap.append((g_measure, x))
 
-            self.q[to_remove_from_q] = None
-            self.q[w.points[0]] = w
-
+            heapq.heapify(w.heap)
             heapq.heappush(self.global_heap, w)
-            print(len(self.global_heap))
-        profile.disable()
-        profile.print_stats(sort='time')
+            print("Clusters left: {}".format(len(self.global_heap)))
 
     def compute_links(self) -> lil_matrix:
         """Returns a sparse matrix of links, O(n*m_a^2) complexity
         where m_a is an average number of neighbors for each cluster-point"""
 
         neighbors_list = self.find_neighbors()
-        links = lil_matrix((self.S.shape[0], self.S.shape[0]), dtype=int)
+        links = np.zeros((self.S.shape[0], self.S.shape[0]), dtype=int)
         n_rows, n_col = self.S.shape
         for i in range(0, n_rows):
             i_neighbors = neighbors_list[i][0]
@@ -123,7 +110,7 @@ class RockClustering:
         neighbors_list = [None for i in range(0, n_rows)]
         for i in range(0, n_rows):
             feature_similarities_and = np.logical_and(self.S, self.S[i, :])
-            feature_similarities_and[i, :] = False
+            feature_similarities_and[i, :] = False  # So that point isn't his own neighbor
             feature_similarities_or = np.logical_or(self.S, self.S[i, :])
             similarity = tanimoto_coefficient(feature_similarities_and, feature_similarities_or)
             neighbors_list[i] = np.where(similarity >= self.nbr_threshold)
@@ -134,10 +121,10 @@ class RockClustering:
         for i in c1.points:
             for j in c2.points:
                 numerator += self.links[i, j]
-        denominator = (len(c1.points) + len(c1.points)) ** self.goodness_exponent - len(c1.points) ** self.goodness_exponent - len(
+        denominator = (len(c1.points) + len(c1.points)) ** self.goodness_exponent - len(
+            c1.points) ** self.goodness_exponent - len(
             c2.points) ** self.goodness_exponent
         return (-1) * numerator / denominator
 
     def clusters(self):
         return [x for x in self.q if x is not None]
-

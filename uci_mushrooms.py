@@ -8,10 +8,10 @@ if __name__ == '__main__':
 
     for i, neighborhood in enumerate(np.unique(data[:, 0]), 0):
         data[data[:, 0] == neighborhood, 0] = i
-    labels = np.asarray(data[:1000, 0], dtype=int)
-    data = np.asarray(data[:1000, 1:])
+    labels = np.asarray(data[:, 0], dtype=int)
+    data = np.asarray(data[:, 1:])
 
-    clustering = RockClustering(categorical_to_binary(data[:, :]), 5, nbr_threshold=0.80)
+    clustering = RockClustering(categorical_to_binary(data[:, :]), 20, nbr_threshold=0.80)
     final_clusters = clustering.clusters()
     for i, cluster in enumerate(final_clusters, 1):
         print("Cluster no. {},\nlength = {}".format(i, len(cluster.points)))

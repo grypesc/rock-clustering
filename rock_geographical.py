@@ -5,7 +5,7 @@ from rock import RockClustering
 
 
 class RockGeoClustering(RockClustering):
-    """ This is adapation of rock clustering to geographical data """
+    """ This is adaptation of rock clustering to geographical data """
 
     def __init__(self, S: np.array, k: int, theta=0.5, nbr_max_distance=100):
         """
@@ -22,6 +22,6 @@ class RockGeoClustering(RockClustering):
         neighbors_list = [None for i in range(0, n_rows)]
         for i in range(0, n_rows):
             distance_vector = spherical_distance(self.S[i, 0], self.S[i, 1], self.S[:, 0], self.S[:, 1])
-            distance_vector[i] = np.inf
+            distance_vector[i] = np.inf  # So that point isn't his own neighbor
             neighbors_list[i] = np.where(distance_vector <= self.nbr_max_distance)
         return neighbors_list
