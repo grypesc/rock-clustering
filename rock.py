@@ -40,7 +40,7 @@ class RockClustering:
         self.S = S
         self.k = k
         self.nbr_threshold = nbr_threshold
-        f_of_theta = (1.0 - self.nbr_threshold) / (1.0 + self.nbr_threshold)  # Used for goodness of measure calculation
+        f_of_theta = (1.0 - self.nbr_threshold) / (1.0 + self.nbr_threshold)
         self.goodness_exponent = 1 + 2 * f_of_theta  # Used for goodness of measure calculation
         self.links = self.compute_links()
         self.q = [Cluster([i]) for i in range(0, S.shape[0])]

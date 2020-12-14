@@ -11,10 +11,6 @@ def purity(clusters, labels):
     return pure_points / labels.shape[0]
 
 
-def overlap_coefficient(feature_similarities_and) -> float:
-    return np.sum(feature_similarities_and) / feature_similarities_and.shape[1]
-
-
 def tanimoto_coefficient(feature_similarities_and, feature_similarities_or) -> float:
     numerator = np.sum(feature_similarities_and, axis=1)
     denominator = np.sum(feature_similarities_or, axis=1)
@@ -33,21 +29,6 @@ def transactions_to_binary(data) -> np.array:
 def categorical_to_binary(data) -> np.array:
     enc = OneHotEncoder(handle_unknown='ignore', sparse=False)
     return enc.fit_transform(data)
-
-
-def binary_search(elements, value):
-    left, right = 0, len(elements) - 1
-
-    while left <= right:
-        middle = (left + right) // 2
-
-        if elements[middle] == value:
-            return middle
-
-        if elements[middle] < value:
-            left = middle + 1
-        elif elements[middle] > value:
-            right = middle - 1
 
 
 def spherical_distance(lat, lon, lat_vector, lon_vector):
