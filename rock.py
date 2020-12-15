@@ -47,7 +47,7 @@ class RockClustering:
         self.global_heap = []  # In the paper it is Q
         self.clustering()
 
-    def clustering(self):
+    def clustering(self) -> None:
         for index in range(0, self.S.shape[0]):
             # Build local heaps
             points_linked = np.nonzero(self.links[index, :])[0]
@@ -125,5 +125,5 @@ class RockClustering:
             c2.points) ** self.goodness_exponent
         return (-1) * numerator / denominator
 
-    def clusters(self):
+    def clusters(self) -> list:
         return [x for x in self.q if x is not None]

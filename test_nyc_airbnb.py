@@ -1,5 +1,6 @@
 import cProfile
 import folium
+import random
 import numpy as np
 import pandas as pd  # nyc_airbnb requires smarter loading then numpy loading
 
@@ -26,7 +27,7 @@ if __name__ == '__main__':
 
     profile = cProfile.Profile()
     profile.enable()
-    clustering = RockGeoClustering(data, 5, theta=0.5, nbr_max_distance=50)
+    clustering = RockGeoClustering(data, 5, theta=0.5, nbr_max_distance=40)
     final_clusters = clustering.clusters()
     profile.disable()
     profile.print_stats(sort='time')
@@ -37,8 +38,7 @@ if __name__ == '__main__':
         counts = np.bincount(np.asarray(labels, dtype=int)[cluster.points])
         dominant = np.argmax(counts)
         if len(cluster.points) != 1:
-            cluster_color = colors.pop(0)
-            colors.append(cluster_color)
+            cluster_color = colors[random.randint(0, len(colors) - 1)]
             for point in cluster.points:
                 folium.Marker(location=data[point, :],
                               icon=folium.Icon(color=cluster_color, icon='circle', prefix='fa-')).add_to(map)
