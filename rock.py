@@ -29,7 +29,8 @@ class Cluster:
 class RockClustering:
     """http://theory.stanford.edu/~sudipto/mypapers/categorical.pdf"""
     """ Many variable names used in this implementation correspond to the original paper linked above,
-     please take a look before you start reading the code """
+     please take a look before you start reading the code. In case of lack of memory, change links matrix to
+      sparse matrix (Scipy lil_matrix) but this will slow down the algorithm."""
 
     def __init__(self, S: np.array, k: int, nbr_threshold=0.5):
         """
@@ -48,6 +49,7 @@ class RockClustering:
         self.clustering()
 
     def clustering(self) -> None:
+        """Performs iterative cluster merging, O(n^3) worst case, can be n^2log(n) if you use linked lists to store a heap"""
         for index in range(0, self.S.shape[0]):
             # Build local heaps
             points_linked = np.nonzero(self.links[index, :])[0]
