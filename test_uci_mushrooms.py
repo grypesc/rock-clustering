@@ -14,7 +14,7 @@ if __name__ == '__main__':
 
     profile = cProfile.Profile()
     profile.enable()
-    clustering = RockClustering(categorical_to_binary(data[:, :]), 20, nbr_threshold=0.80)
+    clustering = RockClustering(categorical_to_binary(data[:, :]), 20, theta=0.80)
     final_clusters = clustering.clusters()
     profile.disable()
     profile.print_stats(sort='time')

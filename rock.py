@@ -1,51 +1,67 @@
 import copy
-import heapq
-import numpy as np
 
+import numpy as np
+from sortedcontainers import SortedList, SortedKeyList
 from utils import tanimoto_coefficient
 
 
 class Cluster:
-    def __init__(self, points, heap=None):
+    def __init__(self, points, sorted_list=None):
         """
+        Cluster contains a list of points that belong to it and a sorted list of (goodness measure, cluster with
+        common neighbor) tuples called local heaps in the paper. cluster2tuple index allows to find tuples in
+        constant time
+
         :param points: Points belonging to this cluster
-        :param heap: Local heap
+        :param sorted_list: Local sorted_list of clusters with common neighbors
         """
         self.points = points
-        self.heap = []
-        if heap is not None:
-            self.heap = heap
+        self.sorted_list = SortedKeyList(key=Cluster._sorted_lists_key)
+        self.cluster2tuple = {}
+        if sorted_list is not None:
+            self.sorted_list = sorted_list
+
+    @staticmethod
+    def _sorted_lists_key(tup):
+        return tup[0], tup[1].points[0]
 
     def __lt__(self, other):
-        """Comparing clusters according to goodness measure of their heap roots.
-        If cluster is outlying and heap is empty than we want it to go down in the global heap Q"""
-        if self.heap and other.heap:
-            return self.heap[0][0] < other.heap[0][0]
-        elif other.heap:
-            return 0
-        return 1
+        """Comparing clusters according to goodness measure of their first sorted lists elements.
+        If cluster is outlying and heap is empty than we want it to go down in the global sorted list/heap Q"""
+        if len(self.sorted_list) != 0 and len(other.sorted_list) != 0:
+            if self.sorted_list[0][0] == other.sorted_list[0][0]:
+                return self.points[0] < other.points[0]
+            return self.sorted_list[0][0] < other.sorted_list[0][0]
+        return len(other.sorted_list) == 0
+
+    def __eq__(self, other):
+        return self.points[0] == other.points[0]
+
+    def __hash__(self):
+        return self.points[0]
 
 
 class RockClustering:
     """http://theory.stanford.edu/~sudipto/mypapers/categorical.pdf"""
     """ Many variable names used in this implementation correspond to the original paper linked above,
-     please take a look before you start reading the code. In case of lack of memory, change links matrix to
-      sparse matrix (Scipy lil_matrix) but this will slow down the algorithm."""
+    please take a look before you start reading the code. Instead of heaps this implementation uses sorted lists
+    In case of lack of memory, change links matrix to sparse matrix (Scipy lil_matrix) but this will slow down 
+    the algorithm."""
 
-    def __init__(self, S: np.array, k: int, nbr_threshold=0.5):
+    def __init__(self, S: np.array, k: int, theta=0.5):
         """
         :param S: Data set to cluster
         :param k: Number of clusters to find
-        :param nbr_threshold: Theta parameter from the original paper, should be from 0 to 1
+        :param theta: Theta parameter from the original paper, should be from 0 to 1
         """
         self.S = S
         self.k = k
-        self.nbr_threshold = nbr_threshold
-        f_of_theta = (1.0 - self.nbr_threshold) / (1.0 + self.nbr_threshold)
+        self.theta = theta
+        f_of_theta = (1.0 - self.theta) / (1.0 + self.theta)
         self.goodness_exponent = 1 + 2 * f_of_theta  # Used for goodness of measure calculation
         self.links = self.compute_links()
         self.q = [Cluster([i]) for i in range(0, S.shape[0])]
-        self.global_heap = []  # In the paper it is Q
+        self.global_sorted_list = SortedList()  # In the paper it is Q
         self.clustering()
 
     def clustering(self) -> None:
@@ -55,40 +71,59 @@ class RockClustering:
             points_linked = np.nonzero(self.links[index, :])[0]
             for point in points_linked:
                 heap_tuple = (self.goodness_measure(self.q[index], self.q[point]), self.q[point])
-                heapq.heappush(self.q[index].heap, heap_tuple)
+                self.q[index].sorted_list.add(heap_tuple)
+                self.q[index].cluster2tuple[heap_tuple[1]] = heap_tuple
 
-        self.global_heap = copy.copy(self.q)
-        heapq.heapify(self.global_heap)
+        self.global_sorted_list = SortedList(copy.copy(self.q))
 
-        while len(self.global_heap) > self.k:
+        while len(self.global_sorted_list) > self.k:
             #  Merge clusters until you reach k clusters or local heaps are empty and ROCK can't continue
-            if not self.global_heap[0].heap:
-                print("Could not find more clusters to merge. Stopped at {} clusters".format(len(self.global_heap)))
+            if not self.global_sorted_list[0].sorted_list:
+                print("Could not find more clusters to merge. Stopped at {} clusters".format(len(self.global_sorted_list)))
                 break
-            u = heapq.heappop(self.global_heap)
-            v = u.heap[0][1]
-            self.global_heap.remove(v)
+            u = self.global_sorted_list.pop(0)
+            v = u.sorted_list[0][1]
+            self.global_sorted_list.discard(v)
+
             w = Cluster(sorted([*u.points, *v.points]))
             self.q[max(u.points[0], v.points[0])] = None
             self.q[w.points[0]] = w
-            nbr_clusters = set([*[j for i, j in u.heap], *[j for i, j in v.heap]])
+            nbr_clusters = set([*[j for i, j in u.sorted_list], *[j for i, j in v.sorted_list]])
             nbr_clusters.remove(u)
             nbr_clusters.remove(v)
 
             for x in nbr_clusters:
                 #  Update local heaps of neighbors of merged cluster u and v
+                self.global_sorted_list.remove(x)
+                try:
+                    local_tuple = x.cluster2tuple[u]
+                    x.sorted_list.discard(local_tuple)
+                    del x.cluster2tuple[u]
+                except KeyError:
+                    pass
+
+                try:
+                    local_tuple = x.cluster2tuple[v]
+                    x.sorted_list.discard(local_tuple)
+                    del x.cluster2tuple[v]
+                except KeyError:
+                    pass
+
                 self.links[x.points[0], w.points[0]] = self.links[x.points[0], u.points[0]] + self.links[
                     x.points[0], v.points[0]]
-                x.heap = [tup for tup in x.heap if tup[1] is not u and tup[1] is not v]
                 g_measure = self.goodness_measure(w, x)
-                x.heap.append((g_measure, w))
-                heapq.heapify(x.heap)
-                w.heap.append((g_measure, x))
 
-            heapq.heapify(w.heap)
-            self.global_heap.append(w)
-            heapq.heapify(self.global_heap)
-            print("Clusters left: {}".format(len(self.global_heap)))
+                tup = (g_measure, w)
+                x.sorted_list.add(tup)
+                x.cluster2tuple[w] = tup
+
+                tup = (g_measure, x)
+                w.sorted_list.add(tup)
+                w.cluster2tuple[x] = tup
+                self.global_sorted_list.add(x)
+
+            self.global_sorted_list.add(w)
+            print("Clusters left: {}".format(len(self.global_sorted_list)))
 
     def compute_links(self) -> np.array:
         """Returns a matrix of links, O(n*m_a^2) complexity
@@ -114,7 +149,7 @@ class RockClustering:
             feature_similarities_and[i, :] = False  # So that point isn't his own neighbor
             feature_similarities_or = np.logical_or(self.S, self.S[i, :])
             similarity = tanimoto_coefficient(feature_similarities_and, feature_similarities_or)
-            neighbors_list[i] = np.where(similarity >= self.nbr_threshold)
+            neighbors_list[i] = np.where(similarity >= self.theta)
         return neighbors_list
 
     def goodness_measure(self, c1: Cluster, c2: Cluster) -> float:
