@@ -4,7 +4,7 @@ import random
 import numpy as np
 import pandas as pd  # nyc_airbnb requires smarter loading then numpy loading
 
-from rock_geographical import RockGeoClustering
+from rock import RockGeoClustering
 from utils import purity
 
 if __name__ == '__main__':
