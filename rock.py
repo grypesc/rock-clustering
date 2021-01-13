@@ -1,6 +1,6 @@
 import copy
-
 import numpy as np
+
 from sortedcontainers import SortedList, SortedKeyList
 from utils import tanimoto_coefficient, spherical_distance, euclidean_distance
 
