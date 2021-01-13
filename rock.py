@@ -139,7 +139,7 @@ class RockClustering:
                 for l in range(j + 1, i_neighbors.shape[0]):
                     links[i_neighbors[j], i_neighbors[l]] = links[i_neighbors[j], i_neighbors[l]] + 1
                     links[i_neighbors[l], i_neighbors[j]] = links[i_neighbors[l], i_neighbors[j]] + 1
-            print("Links calcuated for {} points".format(i))
+            # print("Links calcuated for {} points".format(i))
         return links
 
     def find_neighbors(self) -> list:

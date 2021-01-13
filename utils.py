@@ -14,12 +14,14 @@ def purity(clusters, labels_true):
 def purity_scikit(labels_pred, labels_true):
     pure_points = 0
     pred_values = np.unique(labels_pred)
-    for pred_label in pred_values:
+    for i, pred_label in enumerate(pred_values, 1):
         points = np.where(labels_pred == pred_label)
+        print("Cluster no. {},\nlength = {}".format(i, len(points[0])))
         print(labels_true[points])
         counts = np.bincount(labels_true[points])
         dominant = np.argmax(counts)
         pure_points += np.sum(labels_true[points] == dominant)
+        print("Cluster purity: {}".format(np.sum(labels_true[points] == dominant)/points[0].shape[0]))
     return pure_points / labels_true.shape[0]
 
 
