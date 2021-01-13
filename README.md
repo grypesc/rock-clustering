@@ -1,5 +1,3 @@
 # rock-clustering
 
-Python implementation of ROCK clustering algorithm from original paper and my own adaptation of it to geographical data. You can find 
-examples of its usage in test_uci_mushrooms.py, test_uci_congressional_voting.py, test_rock_geographical.py. These scripts
-require data files to run, provide them, in a original form, in a data directory.
+Python implementations of ROCK clustering algorithm from original paper and my own adaptation of it to geographical (spherical distance) and real (euclidean distance) data. Please note that implementation in rock.py makes use of sorted lists while implementation in rock_heap.py uses heaps. The first is faster because heaps from heapq aren't implemented as linked list. You can find examples of its usage in test_uci_mushrooms.py, test_uci_congressional_voting.py, test_rock_geographical.py, test_iris.py. These scripts require data files to run, provide them in an original form, in a data directory.
